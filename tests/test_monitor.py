@@ -325,3 +325,33 @@ def test_health_probe_only_records_expected_fields(monkeypatch, tmp_path: Path) 
     assert result["ok"] is True
     assert result["body"] == {"status": "ok", "service": "cerepath-api", "version": "0.4.0"}
     assert "secret" not in result["body"]
+
+
+def test_successful_end_to_end_health_corroborates_transient_container_probe_failures(tmp_path: Path) -> None:
+    guardian = Guardian(settings(tmp_path))
+    guardian._health_probe = lambda: {
+        "ok": True,
+        "http_status": 200,
+        "body": {"status": "ok", "service": "cerepath-api", "version": "0.4.0"},
+    }  # type: ignore[method-assign]
+    guardian._compose_services = lambda: {
+        name: {"name": name, "state": "running", "health": "healthy" if name == "db" else "unknown"}
+        for name in ("db", "api", "web")
+    }  # type: ignore[method-assign]
+    guardian._probe_service = lambda name: {
+        "ok": False,
+        "source": "container_exec",
+        "error": "temporary docker exec failure",
+    }  # type: ignore[method-assign]
+
+    report = guardian.check_once()
+
+    assert report["healthy"] is True
+    assert report["overall_healthy"] is True
+    assert report["compose"]["unhealthy_services"] == []
+    for name in ("api", "web"):
+        probe = report["compose"]["services"][name]["probe"]
+        assert probe["ok"] is False
+        assert probe["effective_ok"] is True
+        assert probe["corroborated_by_host_health"] is True
+        assert probe["error"] == "temporary docker exec failure"
