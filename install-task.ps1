@@ -24,6 +24,7 @@ $Principal = New-ScheduledTaskPrincipal -UserId $CurrentUser -LogonType Interact
 $TaskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -StartWhenAvailable
 
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $TaskSettings -Description "Runs the local CEREPATH Guardian supervisor after user logon." -Force | Out-Null
-Write-Host "Installed '$TaskName'. It will start at your next sign-in."
-Write-Host "To start it now: Start-ScheduledTask -TaskName '$TaskName'"
+Start-ScheduledTask -TaskName $TaskName
+Write-Host "Installed and requested start for '$TaskName'. It will also start automatically at each sign-in."
+Write-Host "Task status: Get-ScheduledTask -TaskName '$TaskName' | Get-ScheduledTaskInfo"
 Write-Host "Guardian logs: $(Join-Path $Root 'data\guardian.log')"
