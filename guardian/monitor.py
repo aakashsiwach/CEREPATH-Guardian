@@ -199,7 +199,18 @@ class Guardian:
         for name, status in services.items():
             if status["state"] == "running" and name in {"api", "web"}:
                 status["probe"] = self._probe_service(name)
-            probe_failed = bool(status.get("probe") is not None and not status["probe"].get("ok"))
+            probe = status.get("probe")
+            if probe is not None:
+                raw_probe_ok = bool(probe.get("ok"))
+                # A successful host probe traverses Nginx and FastAPI end to end.
+                # If docker exec is unavailable/transiently failing while that route
+                # succeeds, retain the raw failure for diagnostics but do not classify
+                # a healthy API/web service as down or restart it.
+                corroborated = not raw_probe_ok and bool(health.get("ok")) and name in {"api", "web"}
+                probe["effective_ok"] = raw_probe_ok or corroborated
+                if corroborated:
+                    probe["corroborated_by_host_health"] = True
+            probe_failed = bool(probe is not None and not probe.get("effective_ok", probe.get("ok")))
             failed = status["state"] in {"exited", "dead"} or status["health"] == "unhealthy" or probe_failed
             count = self.store.failures(name) + 1 if failed else 0
             self.store.set_failures(name, count)
@@ -223,7 +234,7 @@ class Guardian:
         bad_services = [
             name for name, status in services.items()
             if status["state"] not in {"running"} or status["health"] == "unhealthy"
-            or (status.get("probe") is not None and not status["probe"].get("ok"))
+            or (status.get("probe") is not None and not status["probe"].get("effective_ok", status["probe"].get("ok")))
         ]
         healthy = bool(health.get("ok")) and compose_ok and not bad_services
         logs = ""
