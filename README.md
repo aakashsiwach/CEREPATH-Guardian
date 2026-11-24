@@ -12,7 +12,7 @@ Guardian runs as a separate process and repository. It does not live inside the 
 - Reads Docker Compose service state using fixed, read-only commands.
 - Collects bounded container logs and redacts common credentials before writing incident reports.
 - Keeps a local SQLite incident and restart-cooldown ledger.
-- Runs fixed liveness probes inside the API container and through the Nginx `/api/health` route, in addition to Docker healthchecks for PostgreSQL, browser-agent and egress-proxy.
+- Runs fixed liveness probes inside the API container and through the Nginx `/api/health` route, in addition to Docker healthchecks for PostgreSQL, browser-agent and egress-proxy. A passing end-to-end host health probe corroborates a transient API/web `docker exec` probe failure; the raw probe error remains in the report for diagnosis and does not create a false restart incident.
 - Optionally restarts allowlisted, non-database services reported as `exited`, `dead`, `unhealthy` or failing repeated in-container probes, or starts a missing allowlisted service from its existing local image, after repeated failures and a cooldown. The next monitoring pass verifies the outcome.
 - Uses an optional OpenAI-compatible model for incident diagnosis.
 - Generates a narrowly scoped unified diff in a disposable clone of CEREPATH. Only explicitly listed existing files may be modified.
@@ -94,11 +94,10 @@ After you have verified observe-only monitoring, you can optionally install a cu
 
 ```powershell
 .\install-task.ps1
-Start-ScheduledTask -TaskName "CEREPATH Guardian" # optional: start now
 Get-ScheduledTask -TaskName "CEREPATH Guardian" | Get-ScheduledTaskInfo
 ```
 
-The task starts Guardian at your next sign-in. Remove it with `.\uninstall-task.ps1` (no Guardian state or reports are deleted).
+The installer now requests an immediate start after registering the task; it also starts at each subsequent sign-in. Remove it with `.\uninstall-task.ps1` (no Guardian state or reports are deleted).
 
 ## Runtime recovery policy
 
